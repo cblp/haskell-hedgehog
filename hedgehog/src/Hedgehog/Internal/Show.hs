@@ -1,6 +1,7 @@
 {-# OPTIONS_HADDOCK not-home #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE TypeApplications #-}
 module Hedgehog.Internal.Show (
     Name
   , Value(..)
@@ -24,6 +25,7 @@ module Hedgehog.Internal.Show (
 
 import           Data.Bifunctor (second)
 
+import           Data.Foldable.Levenshtein (Edit(..), levenshtein)
 import           Text.Show.Pretty (Value(..), Name, reify, valToStr, ppShow)
 
 
@@ -115,10 +117,16 @@ valueDiff x y =
         ->
           ValueTuple (zipWith valueDiff xs ys)
 
-      (List xs, List ys)
-        | length xs == length ys
-        ->
-          ValueList (zipWith valueDiff xs ys)
+      (List xs, List ys) ->
+        ValueList
+          [ case edit of
+              Add b -> ValueDiff (Quote "") b
+              Rem a -> ValueDiff a (Quote "")
+              Copy a -> ValueSame a
+              Swap a b -> valueDiff a b
+              _ {- Transpose -} -> error $ "cannot happen: " ++ show edit
+          | edit <- snd (levenshtein @_ @_ @_ @Int xs ys)
+          ]
 
       _ ->
         ValueDiff x y
